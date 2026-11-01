@@ -40,13 +40,11 @@ DAY_HOURS = range(6, 24)  # hours that count for "today" (rain at 3am doesn't ne
 UPDATE_UNTIL_HOUR = 21  # hourly "weather got worse" checks stop at this local hour
 SUNSCREEN_UV = 3  # UV index from which sunscreen and sunglasses are suggested (WHO: 3+ = protection required)
 # Outfit from the coldest / warmest "feels like" temperature of the day, for the clothes actually owned:
-# light padded jacket, windbreaker, short sleeves
-# One outer layer + what goes under it, from the coldest feels-like temperature of the day:
-#   <= 5 padded + inner layer · 6-10 padded + short sleeves · 11-14 windbreaker + inner layer
-#   15-19 windbreaker + short sleeves · 20+ no jacket
-PADDED_INNER_BELOW = 5
+# light padded jacket, windbreaker, short sleeves, beanie
+# One outer layer (+ beanie when it's cold), from the coldest feels-like temperature of the day:
+#   <= 5 padded + beanie · 6-10 padded · 11-19 windbreaker · 20+ no jacket
+BEANIE_BELOW = 5
 PADDED_BELOW = 10
-WINDBREAKER_INNER_BELOW = 14
 WINDBREAKER_BELOW = 19
 SHORT_SLEEVES_FROM = 25  # warmest feels-like at or above -> short sleeves are fine
 PARASOL_UV = 8  # WHO: 8+ is "very high" -> extra protection, avoid the midday sun
@@ -247,15 +245,13 @@ def mask_line(a):
 
 
 def outfit_line(a):
-    """One outer layer and what to wear under it (inner layer or short sleeves)."""
+    """One outer layer over short sleeves, plus a beanie when it's cold."""
     lo, hi = round(a["feels_lo"]), round(a["feels_hi"])
     feels = f"feels {lo}°–{hi}°"
-    if lo <= PADDED_INNER_BELOW:
-        return f"🪶 Light padded jacket + inner layer — {feels}"
+    if lo <= BEANIE_BELOW:
+        return f"🪶 Light padded jacket + short sleeves + 🧶 beanie — {feels}"
     if lo <= PADDED_BELOW:
         return f"🪶 Light padded jacket + short sleeves — {feels}"
-    if lo <= WINDBREAKER_INNER_BELOW:
-        return f"🌬️ Windbreaker + inner layer — {feels}"
     if lo <= WINDBREAKER_BELOW:
         return f"🌬️ Windbreaker + short sleeves — {feels}"
     if hi >= SHORT_SLEEVES_FROM:

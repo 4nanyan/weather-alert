@@ -2,7 +2,7 @@
 plus an update during the day if rain, snow or fine dust shows up that the morning message didn't mention.
 
 Telegram commands:
-  /location Seoul    set your location (city name in English or the local language, e.g. Tokyo, "Portland, US")
+  /location London   set your location (city name in English or the local language, e.g. Tokyo, "Portland, US")
   /time 5:00         set the daily message time (local time of your location; also 7am, 18:30, 0630)
   /now               send today's forecast right now
   /settings          show your location and time
@@ -30,10 +30,10 @@ from zoneinfo import ZoneInfo
 
 TOKEN = os.environ["TG_TOKEN"].strip()
 CHAT_ID = os.environ["TG_CHAT_ID"].strip()
-STATE_KEY = (os.environ.get("STATE_KEY") or "").strip()  # without it, state is saved unencrypted in state.json
-PLAIN_STATE = Path("state.json")
+STATE_KEY = (os.environ.get("STATE_KEY") or "").strip()  # required: the repo is public, state is only saved encrypted
+PLAIN_STATE = Path("state.json")  # old unencrypted state: still read once, then removed
 SECRET_STATE = Path("state.enc")
-MENU_VERSION = 1  # bump when COMMANDS change so Telegram's menu gets refreshed
+MENU_VERSION = 2  # bump when COMMANDS change so Telegram's menu gets refreshed
 DEFAULT_TIME = "05:00"
 SEND_WINDOW_HOURS = 3  # if runs were delayed past this, skip the day instead of sending a stale "morning" message
 DAY_HOURS = range(6, 24)  # hours that count for "today" (rain at 3am doesn't need an umbrella)
@@ -61,7 +61,7 @@ AIR_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 HELP = (
     "Commands:\n"
-    "/location CITY — set your location (English or local name: Seoul, Tokyo)\n"
+    "/location CITY — set your location (English or local name: London, Tokyo)\n"
     "   Same name in many countries? Add the country: /location Portland, US\n"
     "/time HH:MM — daily message time (e.g. /time 5:00, /time 7am)\n"
     "/now — today's forecast right now\n"
@@ -70,7 +70,7 @@ HELP = (
     "If rain, snow or fine dust shows up later in the day, you get an update."
 )
 COMMANDS = [
-    {"command": "location", "description": "Set location: /location Seoul"},
+    {"command": "location", "description": "Set location: /location London"},
     {"command": "time", "description": "Set daily time: /time 5:00"},
     {"command": "now", "description": "Today's forecast now"},
     {"command": "settings", "description": "Show location and time"},
@@ -109,7 +109,7 @@ def send(text):
 
 # ---------- Location ----------
 def find_place(query):
-    """'Seoul' / a local-language name / 'Portland, US' -> best matching place dict, or None."""
+    """'London' / a local-language name / 'Portland, US' -> best matching place dict, or None."""
     name, _, country = (x.strip() for x in query.partition(","))
     results = get_json(GEO_URL, name=name, count=10, language="en", format="json").get("results") or []
     if country:
@@ -294,7 +294,7 @@ def comfort_line(a):
     if a["chill"] is not None and a["chill"] <= CHILL_FROSTBITE:
         return f"🥶 Frostbite risk (wind chill {round(a['chill'])}°) — cover skin, keep time outside short"
     if a["chill"] is not None and a["chill"] <= CHILL_COLD:
-        return f"🥶 Very cold (wind chill {round(a['chill'])}°) — hat & gloves, don't stay outside long"
+        return f"🥶 Very cold (wind chill {round(a['chill'])}°) — wear the beanie, don't stay outside long"
     return ""
 
 
@@ -385,17 +385,17 @@ def run_command(state, cmd, arg):
 
     elif cmd == "/now":
         if not place:
-            send("📍 Set your location first: /location Seoul")
+            send("📍 Set your location first: /location London")
             return
         send(today_brief(place)[0])
 
     elif cmd == "/settings":
-        where = place_label(place) if place else "not set — /location Seoul"
+        where = place_label(place) if place else "not set — /location London"
         send(f"⚙️ Settings\n📍 Location: {where}\n⏰ Daily message: {state.get('time', DEFAULT_TIME)}\n"
              f"🔔 Updates if the weather gets worse: until {UPDATE_UNTIL_HOUR}:00")
 
     else:
-        intro = "" if place else "👋 First, set your location: /location Seoul\n\n"
+        intro = "" if place else "👋 First, set your location: /location London\n\n"
         send(intro + HELP)
 
 
@@ -481,9 +481,6 @@ def load_state():
 
 def save_state(state):
     data = (json.dumps(state, indent=1, ensure_ascii=False, sort_keys=True) + "\n").encode()
-    if not STATE_KEY:
-        PLAIN_STATE.write_bytes(data)
-        return
     # Encryption is random each time, so only rewrite when something changed (no commit every run).
     if not SECRET_STATE.exists() or decrypt(SECRET_STATE.read_text()) != data:
         SECRET_STATE.write_text(encrypt(data))
@@ -493,6 +490,8 @@ def save_state(state):
 def main():
     if not TOKEN or not CHAT_ID:  # clearer than Telegram's bare 404 when the secrets aren't added yet
         raise SystemExit("TG_TOKEN or TG_CHAT_ID secret is missing: add them in Settings -> Secrets and variables -> Actions")
+    if not STATE_KEY:  # never save the location unencrypted in a public repo
+        raise SystemExit("STATE_KEY secret is missing: add a long random value in Settings -> Secrets and variables -> Actions")
     state = load_state()
     handle_commands(state)
     try:
